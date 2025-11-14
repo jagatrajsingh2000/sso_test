@@ -5,7 +5,8 @@ import {
   getUserInfo, 
   isAuthenticated,
   logout as authLogout,
-  getToken
+  getToken,
+  getAuthorizationCode
 } from './auth.js'
 import { APP_CONFIG } from './config.js'
 import './App.css'
@@ -14,17 +15,31 @@ function App() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [authCode, setAuthCode] = useState(null)
 
   useEffect(() => {
     // Check for SSO callback on mount
     const processCallback = async () => {
       try {
         setLoading(true)
+        
+        // Get authorization code from URL if present
+        const code = getAuthorizationCode()
+        if (code) {
+          setAuthCode(code)
+        }
+        
         const result = await handleSSOCallback()
         
         if (result && Object.keys(result).length > 0) {
-          // Just logged in, set user info
-          setUser(result)
+          // Check if result contains code (meaning login failed but code exists)
+          if (result.code) {
+            setUser(null)
+            setError(result.error || 'Authorization code received but token exchange failed')
+          } else {
+            // Just logged in, set user info
+            setUser(result)
+          }
         } else if (isAuthenticated()) {
           // Already authenticated, get user info
           const userInfo = getUserInfo()
@@ -59,14 +74,30 @@ function App() {
     )
   }
 
-  if (error) {
+  if (error || authCode) {
     return (
       <div className="app-container">
         <div className="card">
           <div className="error">
-            <h2>Error</h2>
-            <p>{error}</p>
-            <button onClick={() => setError(null)}>Dismiss</button>
+            <h2>{authCode ? 'Authorization Code Received' : 'Error'}</h2>
+            {authCode && (
+              <div className="code-display-section">
+                <p className="code-label">Authorization Code from Ping:</p>
+                <div className="code-display">
+                  {authCode}
+                </div>
+                <p className="code-note">
+                  This code needs to be exchanged for a token via backend API.
+                  Use Test Mode below to manually set a token for testing.
+                </p>
+              </div>
+            )}
+            {error && (
+              <div>
+                <p>{error}</p>
+              </div>
+            )}
+            <button onClick={() => { setError(null); setAuthCode(null); }}>Dismiss</button>
           </div>
         </div>
       </div>

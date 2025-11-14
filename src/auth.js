@@ -117,6 +117,15 @@ export const initiateLogin = (redirectUri) => {
 };
 
 /**
+ * Gets the authorization code from URL if present
+ * @returns {string|null} The authorization code or null
+ */
+export const getAuthorizationCode = () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  return urlParams.get('code');
+};
+
+/**
  * Handles SSO callback from URL parameters
  * Extracts code/token from URL and calls login
  * @returns {Promise<Object>} User info or null if no token found
@@ -136,6 +145,10 @@ export const handleSSOCallback = async () => {
     return getUserInfo();
   } catch (err) {
     console.error('Login error:', err);
+    // Return code info even if login fails
+    if (code) {
+      return { code, error: err.message };
+    }
     return null;
   }
 };
