@@ -1,14 +1,191 @@
 /**
  * Authentication Module
- * Handles SSO callback and displays whatever Ping returns
+ * Sample test implementation based on reference structure
  */
 
 import { jwtDecode } from 'jwt-decode';
 import { getSSOUrl } from './utils.js';
 
 // Hardcoded configuration
-const TOKEN_KEY = 'auth_token';
 const SSO_LOGOUT_URL = 'https://your-ping-domain.com/idp/startSSO.ping?PartnerSpId=your-sp-id';
+const LOCALHOST_ACTION = true; // For testing on localhost
+
+/**
+ * Login function - extracts token from URL (no backend call for sample test)
+ * @param {string} code - Authorization code from SSO callback (optional, will extract from URL if not provided)
+ * @returns {Promise<string>} The access token
+ */
+const login = async (code) => {
+  // For sample test: extract token directly from URL instead of calling backend
+  const urlParams = new URLSearchParams(window.location.search);
+  const hash = window.location.hash;
+  
+  let access_token = null;
+
+  // Check URL fragment (for implicit flow: #access_token=...)
+  if (hash) {
+    const hashParams = new URLSearchParams(hash.substring(1));
+    access_token = hashParams.get('access_token') || hashParams.get('id_token');
+  }
+
+  // Check URL query params
+  if (!access_token) {
+    access_token = urlParams.get('access_token') || urlParams.get('id_token') || urlParams.get('token');
+  }
+
+  // If code is provided but no token in URL, simulate token extraction
+  // (In real implementation, this would call backend: /v1/auth/callback/?code=${code})
+  if (code && !access_token) {
+    // For sample test: you can manually set a test token here
+    // In production, this would be: const response = await apiAxios.get(`/v1/auth/callback/?code=${code}`);
+    console.warn('Code provided but no token in URL. For sample test, token should be in URL.');
+  }
+
+  if (access_token) {
+    sessionStorage.setItem('token', access_token);
+    // Clean up URL
+    const newUrl = window.location.pathname;
+    window.history.replaceState({}, document.title, newUrl);
+    return access_token;
+  }
+
+  throw new Error('No access token found in URL');
+};
+
+/**
+ * Logs out the user by clearing the token
+ */
+const logout = () => {
+  sessionStorage.removeItem('token');
+};
+
+/**
+ * Retrieves the JWT token from sessionStorage
+ * @returns {string|null} The JWT token or null if not found
+ */
+const getToken = () => {
+  return sessionStorage.getItem('token');
+};
+
+/**
+ * Decodes and retrieves user information from JWT
+ * @returns {Object} User info object with name, displayName, email, memberOf, exp, or empty object if not authenticated
+ */
+const getUserInfo = () => {
+  const token = sessionStorage.getItem('token');
+  if (token) {
+    try {
+      const decodedToken = jwtDecode(token);
+      return {
+        name: decodedToken.name,
+        displayName: decodedToken.displayName,
+        email: decodedToken.email,
+        memberOf: decodedToken.memberOf,
+        exp: decodedToken.exp,
+      };
+    } catch (error) {
+      console.error('Error decoding token:', error);
+    }
+  }
+  return {};
+};
+
+/**
+ * Checks if user is an admin based on memberOf groups and hostname
+ * @param {Array} memberOf - Array of groups the user belongs to
+ * @returns {boolean} True if user is admin
+ */
+const isAdmin = (memberOf) => {
+  const hostname = window.location.hostname;
+  
+  if (hostname === 'localhost') {
+    return LOCALHOST_ACTION;
+  }
+
+  memberOf = memberOf || [];
+
+  if (hostname.indexOf('global') > -1) {
+    return memberOf.indexOf('mdz-diat-admin-glbl-grp') > -1 || memberOf.indexOf('mdz-diat-admin-amer-grp') > -1;
+  }
+
+  if (hostname.indexOf('amea') > -1) {
+    return memberOf.indexOf('mdz-diat-admin-amea-grp') > -1;
+  }
+
+  if (hostname.indexOf('meu') > -1) {
+    return memberOf.indexOf('mdz-diat-admin-meu-grp') > -1;
+  }
+
+  return false;
+};
+
+/**
+ * Checks if user is a developer
+ * @param {Array} memberOf - Array of groups the user belongs to
+ * @returns {boolean} True if user is developer or admin
+ */
+const isDeveloper = (memberOf) => {
+  const isAnAdmin = isAdmin(memberOf);
+  if (isAnAdmin) {
+    return isAnAdmin;
+  }
+
+  const hostname = window.location.hostname;
+  
+  if (hostname === 'localhost') {
+    return LOCALHOST_ACTION;
+  }
+
+  memberOf = memberOf || [];
+
+  if (hostname.indexOf('global') > -1) {
+    return memberOf.indexOf('mdz-diat-dev-glbl-grp') > -1 || memberOf.indexOf('mdz-diat-dev-amer-grp') > -1;
+  }
+
+  if (hostname.indexOf('amea') > -1) {
+    return memberOf.indexOf('mdz-diat-dev-amea-grp') > -1;
+  }
+
+  if (hostname.indexOf('meu') > -1) {
+    return memberOf.indexOf('mdz-diat-dev-meu-grp') > -1;
+  }
+
+  return false;
+};
+
+/**
+ * Checks if user is a project member
+ * @param {Array} memberOf - Array of groups the user belongs to
+ * @returns {boolean} True if user is project member, developer, or admin
+ */
+const isProjectMember = (memberOf) => {
+  const isADeveloper = isDeveloper(memberOf);
+  if (isADeveloper) {
+    return isADeveloper;
+  }
+
+  const hostname = window.location.hostname;
+  
+  if (hostname === 'localhost') {
+    return LOCALHOST_ACTION;
+  }
+
+  memberOf = memberOf || [];
+
+  if (hostname.indexOf('global') > -1) {
+    return memberOf.indexOf('mdz-diat-prj-glbl-grp') > -1 || memberOf.indexOf('mdz-diat-prj-amer-grp') > -1;
+  }
+
+  if (hostname.indexOf('amea') > -1) {
+    return memberOf.indexOf('mdz-diat-prj-amea-grp') > -1;
+  }
+
+  if (hostname.indexOf('meu') > -1) {
+    return memberOf.indexOf('mdz-diat-prj-meu-grp') > -1;
+  }
+
+  return false;
+};
 
 /**
  * Initiates SSO login by redirecting to Ping Identity
@@ -23,46 +200,27 @@ export const initiateLogin = (redirectUri) => {
 };
 
 /**
- * Logs out the user by clearing the token
- * @param {boolean} redirectToSSO - Whether to redirect to Ping logout URL
+ * Handles SSO callback from URL parameters
+ * Extracts code/token from URL and calls login
+ * @returns {Promise<Object>} User info or null if no token found
  */
-export const logout = (redirectToSSO = false) => {
-  sessionStorage.removeItem(TOKEN_KEY);
-  
-  if (redirectToSSO) {
-    window.location.href = SSO_LOGOUT_URL;
-  }
-};
-
-/**
- * Retrieves the JWT token from sessionStorage or URL
- * @returns {string|null} The JWT token or null if not found
- */
-export const getToken = () => {
-  // First check sessionStorage
-  const storedToken = sessionStorage.getItem(TOKEN_KEY);
-  if (storedToken) return storedToken;
-
-  // Check URL fragment (for implicit flow: #access_token=...)
-  const hash = window.location.hash;
-  if (hash) {
-    const params = new URLSearchParams(hash.substring(1));
-    const token = params.get('access_token') || params.get('id_token');
-    if (token) {
-      sessionStorage.setItem(TOKEN_KEY, token);
-      return token;
-    }
-  }
-
-  // Check URL query params (for some flows: ?token=... or ?id_token=...)
+export const handleSSOCallback = async () => {
   const urlParams = new URLSearchParams(window.location.search);
-  const token = urlParams.get('token') || urlParams.get('id_token') || urlParams.get('access_token');
-  if (token) {
-    sessionStorage.setItem(TOKEN_KEY, token);
-    return token;
+  const code = urlParams.get('code');
+  const error = urlParams.get('error');
+
+  if (error) {
+    console.error('SSO error:', error);
+    throw new Error(`SSO authentication error: ${error}`);
   }
 
-  return null;
+  try {
+    await login(code);
+    return getUserInfo();
+  } catch (err) {
+    console.error('Login error:', err);
+    return null;
+  }
 };
 
 /**
@@ -88,49 +246,5 @@ export const isAuthenticated = () => {
   }
 };
 
-/**
- * Decodes and retrieves all information from JWT
- * Returns the complete decoded JWT payload
- * @returns {Object|null} Complete decoded JWT payload or null if not authenticated
- */
-export const getUserInfo = () => {
-  const token = getToken();
-  if (!token) return null;
-
-  try {
-    const decoded = jwtDecode(token);
-    return decoded;
-  } catch (error) {
-    console.error('Error decoding token:', error);
-    return null;
-  }
-};
-
-/**
- * Handles SSO callback from URL parameters
- * Extracts token from URL and stores it
- * @returns {Object|null} User info or null if no token found
- */
-export const handleSSOCallback = () => {
-  const urlParams = new URLSearchParams(window.location.search);
-  const error = urlParams.get('error');
-  const hash = window.location.hash;
-
-  if (error) {
-    console.error('SSO error:', error);
-    throw new Error(`SSO authentication error: ${error}`);
-  }
-
-  // Try to get token from URL
-  const token = getToken();
-  
-  if (token) {
-    // Clean up URL by removing token parameters
-    const newUrl = window.location.pathname;
-    window.history.replaceState({}, document.title, newUrl);
-    return getUserInfo();
-  }
-
-  return null;
-};
+export { login, logout, getToken, getUserInfo, isAdmin, isDeveloper, isProjectMember };
 
