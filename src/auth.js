@@ -5,10 +5,7 @@
 
 import { jwtDecode } from 'jwt-decode';
 import { getSSOUrl } from './utils.js';
-
-// Hardcoded configuration
-const SSO_LOGOUT_URL = 'https://your-ping-domain.com/idp/startSSO.ping?PartnerSpId=your-sp-id';
-const LOCALHOST_ACTION = true; // For testing on localhost
+import { SSO_CONFIG, APP_CONFIG } from './config.js';
 
 /**
  * Login function - extracts token from URL (no backend call for sample test)
@@ -33,17 +30,33 @@ const login = async (code) => {
     access_token = urlParams.get('access_token') || urlParams.get('id_token') || urlParams.get('token');
   }
 
-  // If code is provided but no token in URL, simulate token extraction
-  // (In real implementation, this would call backend: /v1/auth/callback/?code=${code})
+  // If code is provided but no token in URL
+  // For testing: Check if there's a test token in localStorage or URL param
   if (code && !access_token) {
-    // For sample test: you can manually set a test token here
-    // In production, this would be: const response = await apiAxios.get(`/v1/auth/callback/?code=${code}`);
-    console.warn('Code provided but no token in URL. For sample test, token should be in URL.');
+    // Check for test token in localStorage (for manual testing)
+    const testToken = localStorage.getItem(APP_CONFIG.testTokenKey);
+    if (testToken) {
+      access_token = testToken;
+      console.log('Using test token from localStorage');
+    } else {
+      // Check URL for test token parameter
+      const testTokenParam = urlParams.get('test_token');
+      if (testTokenParam) {
+        access_token = testTokenParam;
+        localStorage.setItem(APP_CONFIG.testTokenKey, testTokenParam);
+        console.log('Using test token from URL parameter');
+      } else {
+        console.warn('Authorization code received but no token found. For testing:');
+        console.warn('1. Add ?test_token=YOUR_JWT_TOKEN to the URL, or');
+        console.warn(`2. Set localStorage.setItem("${APP_CONFIG.testTokenKey}", "YOUR_JWT_TOKEN") in browser console`);
+        throw new Error('No access token found. Ping returned authorization code which requires backend exchange. For testing, provide a test token.');
+      }
+    }
   }
 
   if (access_token) {
-    sessionStorage.setItem('token', access_token);
-    // Clean up URL
+    sessionStorage.setItem(APP_CONFIG.tokenKey, access_token);
+    // Clean up URL (remove test_token if present)
     const newUrl = window.location.pathname;
     window.history.replaceState({}, document.title, newUrl);
     return access_token;
@@ -56,7 +69,7 @@ const login = async (code) => {
  * Logs out the user by clearing the token
  */
 const logout = () => {
-  sessionStorage.removeItem('token');
+  sessionStorage.removeItem(APP_CONFIG.tokenKey);
 };
 
 /**
@@ -64,7 +77,7 @@ const logout = () => {
  * @returns {string|null} The JWT token or null if not found
  */
 const getToken = () => {
-  return sessionStorage.getItem('token');
+  return sessionStorage.getItem(APP_CONFIG.tokenKey);
 };
 
 /**
@@ -72,7 +85,7 @@ const getToken = () => {
  * @returns {Object} User info object with name, displayName, email, memberOf, exp, or empty object if not authenticated
  */
 const getUserInfo = () => {
-  const token = sessionStorage.getItem('token');
+  const token = sessionStorage.getItem(APP_CONFIG.tokenKey);
   if (token) {
     try {
       const decodedToken = jwtDecode(token);
@@ -90,102 +103,6 @@ const getUserInfo = () => {
   return {};
 };
 
-/**
- * Checks if user is an admin based on memberOf groups and hostname
- * @param {Array} memberOf - Array of groups the user belongs to
- * @returns {boolean} True if user is admin
- */
-const isAdmin = (memberOf) => {
-  const hostname = window.location.hostname;
-  
-  if (hostname === 'localhost') {
-    return LOCALHOST_ACTION;
-  }
-
-  memberOf = memberOf || [];
-
-  if (hostname.indexOf('global') > -1) {
-    return memberOf.indexOf('mdz-diat-admin-glbl-grp') > -1 || memberOf.indexOf('mdz-diat-admin-amer-grp') > -1;
-  }
-
-  if (hostname.indexOf('amea') > -1) {
-    return memberOf.indexOf('mdz-diat-admin-amea-grp') > -1;
-  }
-
-  if (hostname.indexOf('meu') > -1) {
-    return memberOf.indexOf('mdz-diat-admin-meu-grp') > -1;
-  }
-
-  return false;
-};
-
-/**
- * Checks if user is a developer
- * @param {Array} memberOf - Array of groups the user belongs to
- * @returns {boolean} True if user is developer or admin
- */
-const isDeveloper = (memberOf) => {
-  const isAnAdmin = isAdmin(memberOf);
-  if (isAnAdmin) {
-    return isAnAdmin;
-  }
-
-  const hostname = window.location.hostname;
-  
-  if (hostname === 'localhost') {
-    return LOCALHOST_ACTION;
-  }
-
-  memberOf = memberOf || [];
-
-  if (hostname.indexOf('global') > -1) {
-    return memberOf.indexOf('mdz-diat-dev-glbl-grp') > -1 || memberOf.indexOf('mdz-diat-dev-amer-grp') > -1;
-  }
-
-  if (hostname.indexOf('amea') > -1) {
-    return memberOf.indexOf('mdz-diat-dev-amea-grp') > -1;
-  }
-
-  if (hostname.indexOf('meu') > -1) {
-    return memberOf.indexOf('mdz-diat-dev-meu-grp') > -1;
-  }
-
-  return false;
-};
-
-/**
- * Checks if user is a project member
- * @param {Array} memberOf - Array of groups the user belongs to
- * @returns {boolean} True if user is project member, developer, or admin
- */
-const isProjectMember = (memberOf) => {
-  const isADeveloper = isDeveloper(memberOf);
-  if (isADeveloper) {
-    return isADeveloper;
-  }
-
-  const hostname = window.location.hostname;
-  
-  if (hostname === 'localhost') {
-    return LOCALHOST_ACTION;
-  }
-
-  memberOf = memberOf || [];
-
-  if (hostname.indexOf('global') > -1) {
-    return memberOf.indexOf('mdz-diat-prj-glbl-grp') > -1 || memberOf.indexOf('mdz-diat-prj-amer-grp') > -1;
-  }
-
-  if (hostname.indexOf('amea') > -1) {
-    return memberOf.indexOf('mdz-diat-prj-amea-grp') > -1;
-  }
-
-  if (hostname.indexOf('meu') > -1) {
-    return memberOf.indexOf('mdz-diat-prj-meu-grp') > -1;
-  }
-
-  return false;
-};
 
 /**
  * Initiates SSO login by redirecting to Ping Identity
@@ -193,7 +110,7 @@ const isProjectMember = (memberOf) => {
  */
 export const initiateLogin = (redirectUri) => {
   const currentUrl = window.location.origin + window.location.pathname;
-  const finalRedirectUri = redirectUri || currentUrl;
+  const finalRedirectUri = redirectUri || SSO_CONFIG.redirectUrl || currentUrl;
   
   const ssoUrl = getSSOUrl(finalRedirectUri);
   window.location.href = ssoUrl;
@@ -246,5 +163,5 @@ export const isAuthenticated = () => {
   }
 };
 
-export { login, logout, getToken, getUserInfo, isAdmin, isDeveloper, isProjectMember };
+export { login, logout, getToken, getUserInfo };
 

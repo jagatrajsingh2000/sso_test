@@ -5,10 +5,9 @@ import {
   getUserInfo, 
   isAuthenticated,
   logout as authLogout,
-  isAdmin,
-  isDeveloper,
-  isProjectMember
+  getToken
 } from './auth.js'
+import { APP_CONFIG } from './config.js'
 import './App.css'
 
 function App() {
@@ -84,6 +83,40 @@ function App() {
             <button className="login-button" onClick={handleLogin}>
               Login with SSO
             </button>
+            <div className="test-mode">
+              <details>
+                <summary>Test Mode (No Backend)</summary>
+                <p className="test-note">
+                  For testing without backend, you can manually set a test JWT token:
+                </p>
+                <div className="test-token-input">
+                  <input
+                    type="text"
+                    id="testTokenInput"
+                    placeholder="Paste JWT token here"
+                    className="token-input"
+                  />
+                  <button
+                    onClick={() => {
+                      const input = document.getElementById('testTokenInput');
+                      const token = input.value.trim();
+                      if (token) {
+                        localStorage.setItem(APP_CONFIG.testTokenKey, token);
+                        window.location.reload();
+                      } else {
+                        alert('Please enter a JWT token');
+                      }
+                    }}
+                    className="test-button"
+                  >
+                    Set Test Token
+                  </button>
+                </div>
+                <p className="test-note-small">
+                  Or add <code>?test_token=YOUR_JWT_TOKEN</code> to the URL
+                </p>
+              </details>
+            </div>
           </div>
         </div>
       </div>
@@ -102,16 +135,29 @@ function App() {
           </div>
 
           <div className="user-info">
-            <div className="info-section">
-              <h2>Complete JWT Payload</h2>
-              <p className="info-note">All data returned from Ping Identity:</p>
-              <pre className="json-display">
-                {JSON.stringify(user, null, 2)}
-              </pre>
+            <div className="info-section success-section">
+              <h2>✓ Token Received Successfully!</h2>
+              <p className="success-message">Token has been received from Ping Identity and stored.</p>
+              <div className="token-status">
+                <strong>Token Status:</strong> <span className="status-active">Active</span>
+              </div>
             </div>
 
             <div className="info-section">
-              <h2>Common Fields</h2>
+              <h2>Token Information</h2>
+              <div className="info-item">
+                <strong>Token (Raw):</strong>
+                <div className="token-display">
+                  {getToken() ? getToken().substring(0, 50) + '...' : 'N/A'}
+                </div>
+              </div>
+              <div className="info-item">
+                <strong>Token Expiration:</strong> {user?.exp ? new Date(user.exp * 1000).toLocaleString() : 'N/A'}
+              </div>
+            </div>
+
+            <div className="info-section">
+              <h2>User Information</h2>
               <div className="info-item">
                 <strong>Name:</strong> {user?.name || 'N/A'}
               </div>
@@ -121,49 +167,14 @@ function App() {
               <div className="info-item">
                 <strong>Email:</strong> {user?.email || 'N/A'}
               </div>
-              <div className="info-item">
-                <strong>Expiration:</strong> {user?.exp ? new Date(user.exp * 1000).toLocaleString() : 'N/A'}
-              </div>
-              {user?.memberOf && (
-                <div className="info-item">
-                  <strong>Member Of:</strong> 
-                  {Array.isArray(user.memberOf) ? (
-                    <div className="roles-list">
-                      {user.memberOf.map((role, index) => (
-                        <span key={index} className="role-badge">
-                          {role}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="role-badge">{user.memberOf}</span>
-                  )}
-                </div>
-              )}
             </div>
 
             <div className="info-section">
-              <h2>Role Checks</h2>
-              <div className="role-checks">
-                <div className="role-check-item">
-                  <span className={isAdmin(user?.memberOf) ? 'check-true' : 'check-false'}>
-                    {isAdmin(user?.memberOf) ? '✓' : '✗'}
-                  </span>
-                  <span>Admin</span>
-                </div>
-                <div className="role-check-item">
-                  <span className={isDeveloper(user?.memberOf) ? 'check-true' : 'check-false'}>
-                    {isDeveloper(user?.memberOf) ? '✓' : '✗'}
-                  </span>
-                  <span>Developer</span>
-                </div>
-                <div className="role-check-item">
-                  <span className={isProjectMember(user?.memberOf) ? 'check-true' : 'check-false'}>
-                    {isProjectMember(user?.memberOf) ? '✓' : '✗'}
-                  </span>
-                  <span>Project Member</span>
-                </div>
-              </div>
+              <h2>Complete JWT Payload</h2>
+              <p className="info-note">All data returned from Ping Identity:</p>
+              <pre className="json-display">
+                {JSON.stringify(user, null, 2)}
+              </pre>
             </div>
           </div>
         </div>
